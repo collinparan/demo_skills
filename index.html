@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Mission Control AI | Collin Paran</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    :root {
+      --glass: rgba(0,0,0,.6);
+      --blur: 14px;
+      --radius: 16px;
+      --accent: #3fb950;
+      --space-blue: #1a1a2e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: var(--space-blue); color: #fff; font-family: system-ui, -apple-system, sans-serif; overflow: hidden; }
+    
+    /* Globe container */
+    #globe { position: fixed; inset: 0; z-index: 0; }
+    
+    /* Top bar */
+    .topbar {
+      position: fixed; top: 16px; left: 16px; right: 16px;
+      display: flex; align-items: center; gap: 12px; z-index: 10;
+    }
+    .chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--glass); backdrop-filter: blur(var(--blur));
+      border-radius: 999px; padding: 10px 16px; font-weight: 600;
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .spacer { flex: 1; }
+    .title-chip { font-size: 1.1em; }
+    
+    /* Voice command display */
+    #voiceCmd {
+      position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+      background: var(--glass); backdrop-filter: blur(var(--blur));
+      border-radius: var(--radius); padding: 12px 24px;
+      font-size: 1.2em; z-index: 10; opacity: 0; transition: opacity 0.3s;
+    }
+    #voiceCmd.show { opacity: 1; }
+    
+    /* Left panel - Bio */
+    #bioPanel {
+      position: fixed; left: 20px; bottom: 20px; width: 320px;
+      background: var(--glass); backdrop-filter: blur(var(--blur));
+      border-radius: var(--radius); padding: 20px; z-index: 10;
+    }
+    #bioPanel h2 { font-size: 1.3em; margin-bottom: 8px; color: var(--accent); }
+    #bioPanel .highlight { 
+      background: linear-gradient(90deg, #3fb950, #58a6ff); 
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      font-weight: 700; font-size: 1.1em;
+    }
+    #bioPanel ul { margin-top: 12px; padding-left: 20px; opacity: 0.9; line-height: 1.6; }
+    #bioPanel .links { margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+    #bioPanel .links a {
+      background: rgba(255,255,255,0.1); padding: 6px 12px; border-radius: 8px;
+      color: #58a6ff; text-decoration: none; font-size: 0.85em;
+    }
+    
+    /* Right panel - AI Vision */
+    #visionPanel {
+      position: fixed; right: 20px; bottom: 20px; width: 380px;
+      background: var(--glass); backdrop-filter: blur(var(--blur));
+      border-radius: var(--radius); overflow: hidden; z-index: 10;
+    }
+    #visionPanel .header { padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    #visionPanel h3 { display: flex; align-items: center; gap: 8px; }
+    #visionPanel .status { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    #videoContainer { position: relative; width: 100%; height: 200px; background: #000; }
+    #video { width: 100%; height: 100%; object-fit: cover; }
+    #visionOutput { padding: 16px; min-height: 80px; font-size: 0.95em; line-height: 1.5; }
+    .promptRow { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.1); }
+    .promptRow input { 
+      flex: 1; background: rgba(255,255,255,0.1); border: none; border-radius: 8px;
+      padding: 10px 14px; color: #fff; font-size: 0.95em; outline: none;
+    }
+    .promptRow button {
+      background: var(--accent); color: #000; border: none; border-radius: 8px;
+      padding: 10px 16px; font-weight: 600; cursor: pointer;
+    }
+    
+    /* Voice commands help */
+    #cmdHelp {
+      position: fixed; right: 20px; top: 80px; width: 200px;
+      background: var(--glass); backdrop-filter: blur(var(--blur));
+      border-radius: var(--radius); padding: 16px; z-index: 10;
+    }
+    #cmdHelp h4 { margin-bottom: 10px; opacity: 0.8; font-size: 0.9em; }
+    #cmdHelp .cmd { font-family: monospace; background: rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 4px; margin: 4px 0; display: inline-block; font-size: 0.85em; }
+    
+    /* Satellite count */
+    #satCount {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: var(--glass); backdrop-filter: blur(var(--blur));
+      border-radius: 999px; padding: 8px 20px; z-index: 10; font-size: 0.9em;
+    }
+    
+    /* Loading overlay */
+    #loading {
+      position: fixed; inset: 0; background: var(--space-blue);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 100; transition: opacity 0.5s;
+    }
+    #loading.hide { opacity: 0; pointer-events: none; }
+    #loading h1 { font-size: 2em; margin-bottom: 20px; }
+    #loadStatus { opacity: 0.7; }
+    .spinner { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.2); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+  
+  <!-- Dependencies -->
+  <script src="//unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="//unpkg.com/satellite.js/dist/satellite.min.js"></script>
+  <script src="//unpkg.com/globe.gl@2.30.0"></script>
+  <script type="importmap">
+  { "imports": { "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2" } }
+  </script>
+</head>
+<body>
+
+<!-- Loading screen -->
+<div id="loading">
+  <div class="spinner"></div>
+  <h1>🛰️ Mission Control AI</h1>
+  <div id="loadStatus">Initializing systems...</div>
+</div>
+
+<!-- Globe -->
+<div id="globe"></div>
+
+<!-- Top bar -->
+<div class="topbar">
+  <div class="chip"><span class="dot"></span> LIVE</div>
+  <div class="chip title-chip">🛰️ Mission Control AI</div>
+  <div class="spacer"></div>
+  <div class="chip" id="timeDisplay">--:--:-- UTC</div>
+</div>
+
+<!-- Voice command display -->
+<div id="voiceCmd">🎤 Listening...</div>
+
+<!-- Bio Panel -->
+<div id="bioPanel">
+  <h2>👨‍🚀 Collin Paran</h2>
+  <div class="highlight">Built the First GenAI in Space</div>
+  <div style="opacity:0.8; margin-top:8px;">August 2024 • ISS National Lab</div>
+  <ul>
+    <li>AI Solutions Architect @ Booz Allen</li>
+    <li>LLMs for Space Force & Navy</li>
+    <li>Data Scientist → AI Engineer</li>
+    <li>MBA 2026</li>
+  </ul>
+  <div class="links">
+    <a href="https://github.com/collinparan" target="_blank">GitHub</a>
+    <a href="https://linkedin.com/in/collinparan" target="_blank">LinkedIn</a>
+    <a href="https://x.com/CollinParan" target="_blank">𝕏</a>
+  </div>
+</div>
+
+<!-- Vision AI Panel -->
+<div id="visionPanel">
+  <div class="header">
+    <h3><span class="status" id="visionStatus"></span> AI Vision (Browser-side)</h3>
+  </div>
+  <div id="videoContainer">
+    <video id="video" autoplay muted playsinline></video>
+  </div>
+  <div id="visionOutput">Loading FastVLM model (WebGPU)...</div>
+  <div class="promptRow">
+    <input id="prompt" placeholder="Ask about what the camera sees..." value="Describe what you see briefly." />
+    <button id="askBtn">Ask</button>
+  </div>
+</div>
+<canvas id="canvas" style="display:none;"></canvas>
+
+<!-- Voice commands help -->
+<div id="cmdHelp">
+  <h4>🎤 Voice Commands</h4>
+  <div><span class="cmd">up</span> <span class="cmd">down</span></div>
+  <div><span class="cmd">left</span> <span class="cmd">right</span></div>
+  <div><span class="cmd">zoom in</span> <span class="cmd">zoom out</span></div>
+  <div><span class="cmd">reset</span></div>
+  <div style="margin-top:8px;opacity:0.6;font-size:0.8em;">Or use arrow keys</div>
+</div>
+
+<!-- Satellite count -->
+<div id="satCount">🛰️ Loading satellites...</div>
+
+<script type="module">
+import { AutoProcessor, AutoModelForImageTextToText, RawImage, TextStreamer, env } from "@huggingface/transformers";
+
+/* ========== CONFIG ========== */
+const EARTH_RADIUS_KM = 6371;
+const SAT_SIZE = 80;
+const TIME_STEP = 3000;
+const VLM_MODEL = "onnx-community/FastVLM-0.5B-ONNX";
+const POLL_MS = 2000;
+
+/* ========== STATE ========== */
+let world, satData = [];
+let processor, model, videoStream;
+let vlmReady = false, vlmLock = false, vlmRunning = true;
+
+/* ========== DOM ========== */
+const loading = document.getElementById('loading');
+const loadStatus = document.getElementById('loadStatus');
+const voiceCmd = document.getElementById('voiceCmd');
+const timeDisplay = document.getElementById('timeDisplay');
+const satCount = document.getElementById('satCount');
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const visionOutput = document.getElementById('visionOutput');
+const visionStatus = document.getElementById('visionStatus');
+const promptInput = document.getElementById('prompt');
+const askBtn = document.getElementById('askBtn');
+
+/* ========== GLOBE SETUP ========== */
+async function initGlobe() {
+  loadStatus.textContent = "Initializing 3D globe...";
+  
+  world = Globe()(document.getElementById('globe'))
+    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+    .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+    .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+    .objectLat('lat')
+    .objectLng('lng')
+    .objectAltitude('alt')
+    .objectLabel('name');
+
+  // Satellite mesh
+  const satGeometry = new THREE.OctahedronGeometry(SAT_SIZE * world.getGlobeRadius() / EARTH_RADIUS_KM / 2, 0);
+  const satMaterial = new THREE.MeshLambertMaterial({ color: 'palegreen', transparent: true, opacity: 0.7 });
+  world.objectThreeObject(() => new THREE.Mesh(satGeometry, satMaterial));
+
+  // Load satellite TLE data
+  loadStatus.textContent = "Loading satellite data...";
+  const rawData = await fetch('//globe.gl/example/datasets/space-track-leo.txt').then(r => r.text());
+  const tleData = rawData.replace(/\r/g, '').split(/\n(?=[^12])/).filter(d => d).map(tle => tle.split('\n'));
+  
+  satData = tleData.map(([name, ...tle]) => ({
+    satrec: satellite.twoline2satrec(...tle),
+    name: name.trim().replace(/^0 /, '')
+  })).filter(d => !!satellite.propagate(d.satrec, new Date()).position).slice(0, 1500);
+
+  satCount.textContent = `🛰️ Tracking ${satData.length} satellites`;
+
+  // Animation loop
+  let time = new Date();
+  (function tick() {
+    requestAnimationFrame(tick);
+    time = new Date(+time + TIME_STEP);
+    timeDisplay.textContent = time.toUTCString().slice(17, 25) + ' UTC';
+    
+    const gmst = satellite.gstime(time);
+    satData.forEach(d => {
+      const eci = satellite.propagate(d.satrec, time);
+      if (eci.position) {
+        const gdPos = satellite.eciToGeodetic(eci.position, gmst);
+        d.lat = satellite.radiansToDegrees(gdPos.latitude);
+        d.lng = satellite.radiansToDegrees(gdPos.longitude);
+        d.alt = gdPos.height / EARTH_RADIUS_KM;
+      }
+    });
+    world.objectsData(satData);
+  })();
+
+  world.pointOfView({ altitude: 2.5 });
+}
+
+/* ========== VISION AI SETUP ========== */
+async function initVLM() {
+  if (!('gpu' in navigator)) {
+    visionOutput.textContent = "⚠️ WebGPU not available. Use Chrome 113+ or Edge.";
+    return;
+  }
+
+  loadStatus.textContent = "Loading AI vision model...";
+  visionOutput.textContent = "Loading processor...";
+  
+  env.allowLocalModels = false;
+  processor = await AutoProcessor.from_pretrained(VLM_MODEL);
+  
+  visionOutput.textContent = "Loading model (WebGPU)...";
+  model = await AutoModelForImageTextToText.from_pretrained(VLM_MODEL, {
+    device: "webgpu",
+    dtype: { embed_tokens: "fp16", vision_encoder: "q4", decoder_model_merged: "q4" }
+  });
+
+  // Get camera
+  loadStatus.textContent = "Requesting camera access...";
+  videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+  video.srcObject = videoStream;
+  await video.play();
+
+  vlmReady = true;
+  visionOutput.textContent = "✅ AI ready. Ask me anything!";
+  visionStatus.style.background = '#3fb950';
+  
+  // Auto-poll
+  setInterval(() => { if (vlmRunning) runVLM(); }, POLL_MS);
+}
+
+async function runVLM(customPrompt) {
+  if (!vlmReady || vlmLock) return;
+  vlmLock = true;
+  
+  try {
+    const promptText = customPrompt || promptInput.value || "Describe what you see briefly.";
+    
+    // Grab frame
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const img = new RawImage(frame.data, frame.width, frame.height, 4);
+
+    const messages = [
+      { role: "system", content: "You are a helpful visual AI. Respond very concisely in 1-2 sentences." },
+      { role: "user", content: `<image>${promptText}` }
+    ];
+    const prompt = processor.apply_chat_template(messages, { add_generation_prompt: true });
+    const inputs = await processor(img, prompt, { add_special_tokens: false });
+
+    let text = "";
+    const streamer = new TextStreamer(processor.tokenizer, {
+      skip_prompt: true, skip_special_tokens: true,
+      callback_function: t => { text += t; visionOutput.textContent = text; }
+    });
+
+    await model.generate({ ...inputs, max_new_tokens: 64, do_sample: false, repetition_penalty: 1.2, streamer });
+  } catch (e) {
+    visionOutput.textContent = "Error: " + e.message;
+  } finally {
+    vlmLock = false;
+  }
+}
+
+/* ========== VOICE CONTROL ========== */
+function initVoice() {
+  if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+    console.warn('Speech recognition not available');
+    return;
+  }
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const recognition = new SpeechRecognition();
+  recognition.continuous = true;
+  recognition.lang = 'en-US';
+
+  recognition.onresult = (event) => {
+    const cmd = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
+    showVoiceCmd(cmd);
+    handleCommand(cmd);
+  };
+
+  recognition.onerror = (e) => console.error('Voice error:', e.error);
+  recognition.onend = () => recognition.start();
+  recognition.start();
+}
+
+function showVoiceCmd(cmd) {
+  voiceCmd.textContent = `🎤 "${cmd}"`;
+  voiceCmd.classList.add('show');
+  setTimeout(() => voiceCmd.classList.remove('show'), 2000);
+}
+
+function handleCommand(cmd) {
+  const pov = world.pointOfView();
+  const step = 20;
+  const zoomStep = 0.5;
+
+  switch(cmd) {
+    case 'up': world.pointOfView({ lat: (pov.lat || 0) + step }); break;
+    case 'down': world.pointOfView({ lat: (pov.lat || 0) - step }); break;
+    case 'left': world.pointOfView({ lng: (pov.lng || 0) - step }); break;
+    case 'right': world.pointOfView({ lng: (pov.lng || 0) + step }); break;
+    case 'zoom in': world.pointOfView({ altitude: Math.max(0.5, pov.altitude - zoomStep) }); break;
+    case 'zoom out': world.pointOfView({ altitude: Math.min(5, pov.altitude + zoomStep) }); break;
+    case 'reset': world.pointOfView({ lat: 0, lng: 0, altitude: 2.5 }); break;
+    case 'find iss': case 'show iss': case 'iss':
+      const iss = satData.find(s => s.name.includes('ISS'));
+      if (iss) world.pointOfView({ lat: iss.lat, lng: iss.lng, altitude: 1.5 });
+      break;
+  }
+}
+
+/* ========== KEYBOARD CONTROLS ========== */
+document.addEventListener('keydown', (e) => {
+  const keyMap = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', '+': 'zoom in', '-': 'zoom out', 'r': 'reset' };
+  if (keyMap[e.key]) handleCommand(keyMap[e.key]);
+});
+
+/* ========== UI EVENTS ========== */
+askBtn.onclick = () => runVLM(promptInput.value);
+promptInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') runVLM(promptInput.value); });
+
+/* ========== BOOT ========== */
+async function boot() {
+  try {
+    await initGlobe();
+    await initVLM();
+    initVoice();
+    loadStatus.textContent = "All systems go! 🚀";
+    setTimeout(() => loading.classList.add('hide'), 500);
+  } catch (e) {
+    loadStatus.textContent = "Error: " + e.message;
+    console.error(e);
+  }
+}
+
+boot();
+</script>
+</body>
+</html>
