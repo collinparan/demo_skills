@@ -223,9 +223,9 @@ async function initGlobe() {
   loadStatus.textContent = "Initializing 3D globe...";
   
   world = Globe()(document.getElementById('globe'))
-    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
-    .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
-    .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+    .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+    .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
     .objectLat('lat')
     .objectLng('lng')
     .objectAltitude('alt')
@@ -238,9 +238,12 @@ async function initGlobe() {
 
   // Load satellite TLE data
   loadStatus.textContent = "Loading satellite data...";
-  const rawData = await fetch('//globe.gl/example/datasets/space-track-leo.txt').then(r => r.text());
+  console.log("Fetching satellite TLE data...");
+  const rawData = await fetch('https://globe.gl/example/datasets/space-track-leo.txt').then(r => r.text());
+  console.log("TLE data loaded, length:", rawData.length);
   const tleData = rawData.replace(/\r/g, '').split(/\n(?=[^12])/).filter(d => d).map(tle => tle.split('\n'));
   
+  console.log("Parsing TLE entries:", tleData.length);
   satData = tleData.map(([name, ...tle]) => {
     try {
       return {
@@ -248,7 +251,7 @@ async function initGlobe() {
         name: name.trim().replace(/^0 /, ''),
         lat: 0, lng: 0, alt: 0.1
       };
-    } catch { return null; }
+    } catch (e) { console.warn("TLE parse error:", e); return null; }
   }).filter(d => {
     if (!d) return false;
     try {
@@ -257,6 +260,7 @@ async function initGlobe() {
     } catch { return false; }
   }).slice(0, 1500);
 
+  console.log("Valid satellites:", satData.length);
   satCount.textContent = `🛰️ Tracking ${satData.length} satellites`;
 
   // Animation loop
@@ -415,16 +419,24 @@ promptInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') runVLM(p
 /* ========== BOOT ========== */
 async function boot() {
   try {
+    console.log("Starting globe...");
     await initGlobe();
+    console.log("Globe ready, starting VLM...");
     await initVLM();
+    console.log("VLM ready, starting voice...");
     initVoice();
     loadStatus.textContent = "All systems go! 🚀";
     setTimeout(() => loading.classList.add('hide'), 500);
   } catch (e) {
-    loadStatus.textContent = "Error: " + e.message;
-    console.error(e);
+    loadStatus.textContent = "Error: " + e.message + " (check console)";
+    console.error("Boot error:", e);
   }
 }
+
+window.onerror = (msg, src, line, col, err) => {
+  console.error("Global error:", msg, src, line);
+  loadStatus.textContent = "Error: " + msg;
+};
 
 boot();
 </script>
