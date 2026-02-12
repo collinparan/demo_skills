@@ -241,10 +241,21 @@ async function initGlobe() {
   const rawData = await fetch('//globe.gl/example/datasets/space-track-leo.txt').then(r => r.text());
   const tleData = rawData.replace(/\r/g, '').split(/\n(?=[^12])/).filter(d => d).map(tle => tle.split('\n'));
   
-  satData = tleData.map(([name, ...tle]) => ({
-    satrec: satellite.twoline2satrec(...tle),
-    name: name.trim().replace(/^0 /, '')
-  })).filter(d => !!satellite.propagate(d.satrec, new Date()).position).slice(0, 1500);
+  satData = tleData.map(([name, ...tle]) => {
+    try {
+      return {
+        satrec: satellite.twoline2satrec(...tle),
+        name: name.trim().replace(/^0 /, ''),
+        lat: 0, lng: 0, alt: 0.1
+      };
+    } catch { return null; }
+  }).filter(d => {
+    if (!d) return false;
+    try {
+      const eci = satellite.propagate(d.satrec, new Date());
+      return eci && eci.position;
+    } catch { return false; }
+  }).slice(0, 1500);
 
   satCount.textContent = `🛰️ Tracking ${satData.length} satellites`;
 
@@ -257,15 +268,17 @@ async function initGlobe() {
     
     const gmst = satellite.gstime(time);
     satData.forEach(d => {
-      const eci = satellite.propagate(d.satrec, time);
-      if (eci.position) {
-        const gdPos = satellite.eciToGeodetic(eci.position, gmst);
-        d.lat = satellite.radiansToDegrees(gdPos.latitude);
-        d.lng = satellite.radiansToDegrees(gdPos.longitude);
-        d.alt = gdPos.height / EARTH_RADIUS_KM;
-      }
+      try {
+        const eci = satellite.propagate(d.satrec, time);
+        if (eci && eci.position) {
+          const gdPos = satellite.eciToGeodetic(eci.position, gmst);
+          d.lat = satellite.radiansToDegrees(gdPos.latitude);
+          d.lng = satellite.radiansToDegrees(gdPos.longitude);
+          d.alt = gdPos.height / EARTH_RADIUS_KM;
+        }
+      } catch (e) { /* skip bad satellite */ }
     });
-    world.objectsData(satData);
+    world.objectsData(satData.filter(d => d.lat !== undefined));
   })();
 
   world.pointOfView({ altitude: 2.5 });
