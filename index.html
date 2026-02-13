@@ -304,7 +304,7 @@ async function initVLM() {
   visionOutput.textContent = "Loading model (WebGPU)...";
   model = await AutoModelForImageTextToText.from_pretrained(VLM_MODEL, {
     device: "webgpu",
-    dtype: { embed_tokens: "fp16", vision_encoder: "q4", decoder_model_merged: "q4" }
+    dtype: { embed_tokens: "fp32", vision_encoder: "q4", decoder_model_merged: "q4" }
   });
 
   // Get camera
